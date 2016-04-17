@@ -1,19 +1,18 @@
 #!/usr/bin/env python
-
+# coding: utf8
 
 __version__ = "0.6"
 
 import base64
 import codecs
-import io
 import locale
 import os
 import re
 import shutil
 import stat
 import sys
+import unicodedata
 
-import time
 from datetime import datetime
 from io import IOBase
 from optparse import OptionParser
@@ -48,7 +47,7 @@ class RemoveNullsStream(IOBase):
 class iPhotoLibrary(object):
     def __init__(self, albumDir, destDir, use_album=False, use_date=False,
                  use_faces=False, use_metadata=False, deconflict=False, quiet=False,
-                 year_dir=False, import_missing=False, import_from_date=None, test=False,
+                 year_dir=False, normalize=False, import_missing=False, import_from_date=None, test=False,
                  date_delimiter="-", ignore_time_delta=False, originals=False):
         self.use_album = use_album
         self.use_date =  use_date
@@ -65,6 +64,7 @@ class iPhotoLibrary(object):
         self.images = {}
         self.test = test
         self.year_dir = year_dir
+        self.normalize = normalize
         self.import_missing = import_missing
         self.ignore_time_delta = ignore_time_delta
         self.date_delimiter = date_delimiter
@@ -284,6 +284,10 @@ class iPhotoLibrary(object):
             else:
                 outputPath = folderName
 
+            # Normalize folder name
+            if self.normalize:
+                outputPath = normalize_text(outputPath)
+             
             # Deconflict output directories
             targetFileDir = os.path.join(self.dest_dir, outputPath)
             if self.deconflict:
@@ -357,8 +361,10 @@ end tell
             else:
                 mFilePath = image["ImagePath"]
         basename = os.path.basename(mFilePath)
+        if self.normalize:
+            basename = normalize_text(basename)
 
-        # Deconflict ouput filenames
+        # Deconflict ouput filenames        
         tFilePath = os.path.join(folderName, basename)
         if self.deconflict:
             j = 1
@@ -380,6 +386,8 @@ end tell
                 self.status("-")
                 return
 
+        if self.test:
+            self.status("%s => %s" % (mFilePath, tFilePath))
         if not self.test and os.path.exists(mFilePath):
             shutil.copy2(mFilePath, tFilePath)
         md_written = False
@@ -389,6 +397,7 @@ end tell
             self.status("+")
         else:
             self.status(".")
+                
 
     def writePhotoMD(self, imageId, filePath=None):
         """
@@ -515,6 +524,39 @@ def error(msg):
     sys.stderr.write("\n%s\n" % msg)
     sys.exit(1)
 
+def strip_accents(text):
+    """
+    Strip accents from input String.
+
+    :param text: The input string.
+    :type text: String.
+
+    :returns: The processed String.
+    :rtype: String.
+    """
+    try:
+        text = unicode(text, 'utf-8')
+    except TypeError: 
+        pass
+    text = unicodedata.normalize('NFD', text)
+    text = text.encode('ascii', 'ignore')
+    text = text.decode("utf-8")
+    return str(text)
+
+def normalize_text(text):
+    """
+    Convert input text to id.
+
+    :param text: The input string.
+    :type text: String.
+
+    :returns: The processed String.
+    :rtype: String.
+    """
+    text = strip_accents(text.lower())
+    text = re.sub('[ ]+', '_', text)
+    text = re.sub('[^0-9a-zA-Z_/\.-]', '', text)
+    return text
 
 if __name__ == '__main__':
     usage   = "Usage: %prog [options] <iPhoto Library dir> <destination dir>"
@@ -565,6 +607,11 @@ if __name__ == '__main__':
     option_parser.add_option("-y", "--yeardir",
                              action="store_true", dest="year_dir",
                              help="add year directory to output"
+    )
+
+    option_parser.add_option("-n", "--normalize",
+                             action="store_true", dest="normalize",
+                             help="normalize folder and file names (azAZ09-_)"
     )
 
     option_parser.add_option("-e", "--date_delimiter",
@@ -618,6 +665,7 @@ if __name__ == '__main__':
                                 deconflict=options.deconflict,
                                 quiet=options.quiet,
                                 year_dir=options.year_dir,
+                                normalize=options.normalize,
                                 import_missing=options.import_missing,
                                 import_from_date=options.import_from_date,
                                 test=options.test,
