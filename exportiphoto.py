@@ -387,9 +387,12 @@ end tell
                 return
 
         if self.test:
-            self.status("%s => %s" % (mFilePath, tFilePath))
-        if not self.test and os.path.exists(mFilePath):
-            shutil.copy2(mFilePath, tFilePath)
+            self.status("TEST: copy %s to %s" % (mFilePath, tFilePath))
+        else: 
+            if os.path.exists(mFilePath):
+                shutil.copy2(mFilePath, tFilePath)
+            else:
+                self.status("WARN: missing %s" % mFilePath)
         md_written = False
         if self.use_metadata:
             md_written = self.writePhotoMD(imageId, tFilePath)
